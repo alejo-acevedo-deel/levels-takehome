@@ -30,7 +30,7 @@ class SyncStore {
     const { mostRecent } = this.sessions[userId];
     const syncHistory = this.sessions[userId][syncType];
 
-    if (syncHistory.length === 0) {
+    if (!mostRecent) {
       // No syncs have been made yet, no need to validate then. Proceed to sync. 
       return true;
     }
@@ -43,12 +43,14 @@ class SyncStore {
         break;
       }
       case 'UserAppOpen': {
+        if (syncHistory.length === 0) return true;
         if (!this.validateSyncsWithinTimeRange(syncHistory, timestamp, { syncsAllowed: 2, minutesTimeRange: 3 })) break;
         if (!this.validateSyncsWithinTimeRange(syncHistory, timestamp, { syncsAllowed: 5, minutesTimeRange: 30 })) break;
         isValid = true;
         break;
       }
       case 'UserRequest': {
+        if (syncHistory.length === 0) return true;
         if (!this.validateSyncsWithinTimeRange(syncHistory, timestamp, { syncsAllowed: 1, minutesTimeRange: 3 })) break;
         if (!this.validateSyncsWithinTimeRange(syncHistory, timestamp, { syncsAllowed: 3, minutesTimeRange: 30 })) break;
         isValid = true;
