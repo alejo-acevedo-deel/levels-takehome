@@ -1,18 +1,22 @@
+const SyncStore = require('./sync-model');
 
-enum RequestType {
-  Automated = 'Automated',
-  UserAppOpen = 'UserAppOpen',
-  UserRequest = 'UserRequest',
-}
+// Mock syncStore to behave like a db
+const syncStore = new SyncStore();
 
-enum SyncResult {
-  SyncSuccessful = 'SyncSuccessful',
-  SyncFailed = 'SyncFailed',
-  RateLimited = 'RateLimited',
-}
+const RequestType = {
+  Automated: 'Automated',
+  UserAppOpen: 'UserAppOpen',
+  UserRequest: 'UserRequest',
+};
+
+const SyncResult = {
+  SyncSuccessful: 'SyncSuccessful',
+  SyncFailed: 'SyncFailed',
+  RateLimited: 'RateLimited',
+};
 
 // Fake implementation of a sync job.
-function doSync(userId: string): Promise<void> {
+function doSync(userId) {
   return new Promise((resolve, reject) => {
     setTimeout(() => {
       if (Math.random() < 0.1) {
@@ -40,22 +44,34 @@ function doSync(userId: string): Promise<void> {
  *    consider successes.
  */
 function syncGlucoseData(
-  userId: string,
-  syncType: RequestType
-): Promise<SyncResult> {
-  // TODO: implement rate limiting...
-  return doSync(userId)
-    .then(() => SyncResult.SyncSuccessful)
-    .catch(() => SyncResult.SyncFailed);
-}
+  userId,
+  syncType) {
+    return new Promise((resolve, _) => {
+    syncSession = syncStore.getSession(userId); 
+    if (!syncSession) {
+      syncStore.newSession(userId);
+    }
+    const syncStamp = { timestamp: Date.now(), userId, syncType };
+    if (syncStore.validateRequestAttempt(syncStamp)) {
+      return doSync(userId)
+      .then(() => {
+        syncStore.saveSync(syncStamp);
+        return resolve(SyncResult.SyncSuccessful);
+      })
+      .catch(() => resolve(SyncResult.SyncFailed)); // *  weird right ? * /
+    }
+    // If it was not available it means it was rate limited (: so we delete it
+    console.info(`Exceeded sync requests. Limiting user: ${userId}`);
+    return resolve(SyncResult.RateLimited);
+    });
+};
 
-
-function testSyncHelper(userId: string, syncType: RequestType, delaySeconds: number) {
+function testSyncHelper(userId, syncType, delaySeconds) {
   // To actually test this with several minutes, you may want to think about a better way
   // to test that doesn't require waiting a long time.
   setTimeout(() => {
     const startTime = new Date();
-    syncGlucoseData(userId, syncType).then(result => {
+    return syncGlucoseData(userId, syncType).then(result => {
       const endTime = new Date();
       const durationSeconds = (endTime.getTime() - startTime.getTime()) / 1000;
       console.log(`→ ${syncType} for ${userId}: ${result} after ${durationSeconds}s`);
@@ -72,10 +88,7 @@ async function run() {
   testSyncHelper('b', RequestType.UserAppOpen, 10);
   testSyncHelper('b', RequestType.UserAppOpen, 11); // Should always gets rejected
   testSyncHelper('a', RequestType.UserRequest, 12);
-  
   return;
 }
 
 run();
-
-export {};
